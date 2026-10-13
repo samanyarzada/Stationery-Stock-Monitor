@@ -4,464 +4,176 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stationery Stock Monitor</title>
+    <!-- Apply saved theme before first paint to avoid a flash -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("ssm-theme");
+          if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          document.documentElement.setAttribute("data-theme", t);
+          var l = localStorage.getItem("ssm-lang");
+          if (!l) l = (navigator.language || "").slice(0, 2) === "fa" ? "fa" : "en";
+          document.documentElement.lang = l;
+          document.documentElement.dir = l === "fa" ? "rtl" : "ltr";
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
-  
   </head>
   <body>
     <header class="app-header">
       <div class="container header-inner">
-        <div class="brand">
+        <div>
           <p class="brand-mark">Ledger &amp; Loop Stationers</p>
           <h1>Stationery Stock Monitor</h1>
         </div>
-        <p class="tagline">
-          Track what's on the shelf, spot shortages early, keep the counts
-          honest.
-        </p>
+        <div class="header-actions">
+          <button type="button" id="export-btn" class="btn btn-secondary" disabled>Export CSV</button>
+          <button type="button" id="reset-btn" class="btn btn-secondary" disabled>Reset data</button>
+          <button type="button" id="lang-btn" class="btn btn-secondary" aria-label="Language">فارسی</button>
+          <button type="button" id="theme-btn" class="btn btn-secondary btn-icon" aria-label="Toggle light/dark theme" title="Toggle theme">
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          </button>
+        </div>
       </div>
     </header>
 
     <main>
       <div class="container">
-        <!-- Loading state: shown while data.json is being fetched -->
-        <div id="load-status" class="message" role="status">
-          Loading inventory&hellip;
-        </div>
-
-        <!-- Failure state: shown if the fetch fails; hidden by default -->
+        <div id="load-status" class="message" role="status">Loading inventory&hellip;</div>
         <div id="load-error" class="message error" role="alert" hidden>
-          <p>
-            We couldn't load the inventory. Check that <code>data.json</code> is
-            available and try again.
-          </p>
-          <button id="retry-btn" type="button" class="btn-secondary">
-            Retry
-          </button>
+          <p>We couldn't load the inventory. Check that <code>data.json</code> is available (run the project through a local server) and try again.</p>
+          <button id="retry-btn" type="button" class="btn btn-secondary">Retry</button>
         </div>
 
-        <!-- Success feedback banner, e.g. "Product added.", reused for confirmations -->
-        <div
-          id="action-message"
-          class="message success"
-          role="status"
-          hidden
-        ></div>
-
-        <section class="summary" aria-label="Inventory summary">
+        <section class="summary" aria-label="Inventory summary" style="margin-top:1.25rem">
           <div class="stat">
-            <span class="stat-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M3 3v18h18" />
-                <path d="M7 14l4-4 3 3 5-6" />
-              </svg>
-            </span>
-            <span class="stat-body">
-              <span class="stat-label">Inventory value</span>
-              <strong id="stat-value">945 AFN</strong>
-            </span>
+            <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
+            <span><span class="stat-label">Inventory value</span><strong id="stat-value">–</strong></span>
+          </div>
+          <div class="stat">
+            <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg></span>
+            <span><span class="stat-label">Products · units</span><strong id="stat-count">–</strong></span>
           </div>
           <div class="stat stat--warning">
-            <span class="stat-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-                <path
-                  d="M10.29 3.86 1.82 18a1.5 1.5 0 0 0 1.3 2.25h17.76a1.5 1.5 0 0 0 1.3-2.25L13.71 3.86a1.5 1.5 0 0 0-2.42 0Z"
-                />
-              </svg>
-            </span>
-            <span class="stat-body">
-              <span class="stat-label">Low or out of stock</span>
-              <strong id="stat-low">3 products</strong>
-            </span>
+            <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a1.5 1.5 0 0 0 1.3 2.2h17.8a1.5 1.5 0 0 0 1.3-2.2L13.7 3.9a1.5 1.5 0 0 0-2.4 0Z"/></svg></span>
+            <span><span class="stat-label">Low stock</span><strong id="stat-low">–</strong></span>
+          </div>
+          <div class="stat stat--danger">
+            <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/></svg></span>
+            <span><span class="stat-label">Out of stock</span><strong id="stat-out">–</strong></span>
           </div>
         </section>
 
         <div class="workspace">
-          <section class="main-panel panel" aria-labelledby="inventory-heading">
-            <h2 id="inventory-heading">
-              <span class="panel-icon" aria-hidden="true"
-                ><svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path
-                    d="M20 7h-9m9 5h-9m9 5h-9M5 6.5v.01M5 11.5v.01M5 16.5v.01"
-                  /></svg
-              ></span>
-              Inventory
-            </h2>
+          <section class="panel" aria-labelledby="inventory-heading">
+            <h2 id="inventory-heading">Inventory</h2>
 
             <form class="toolbar" id="filter-form">
               <div class="field">
-                <label for="search-input">Search by name</label>
-                <input
-                  type="search"
-                  id="search-input"
-                  name="search"
-                  placeholder="e.g. pencil"
-                  autocomplete="off"
-                  disabled
-                />
+                <label for="search-input"><span id="search-label">Search</span> <kbd class="muted">( / )</kbd></label>
+                <input type="search" id="search-input" placeholder="e.g. pencil" autocomplete="off" disabled />
               </div>
-
               <div class="field">
                 <label for="category-select">Category</label>
-                <select id="category-select" name="category" disabled>
-                  <option value="">All categories</option>
-                  <option value="Paper">Paper</option>
-                  <option value="Writing">Writing</option>
-                  <option value="Office">Office</option>
+                <select id="category-select" disabled><option value="">All categories</option></select>
+              </div>
+              <div class="field">
+                <label for="status-select">Status</label>
+                <select id="status-select" disabled>
+                  <option value="">All</option>
+                  <option value="in">In stock</option>
+                  <option value="low">Low stock</option>
+                  <option value="out">Out of stock</option>
+                  <option value="attention">Low &amp; out</option>
                 </select>
               </div>
-
-              <div class="field field--checkbox">
-                <label class="choice" for="low-stock-only">
-                  <input
-                    type="checkbox"
-                    id="low-stock-only"
-                    name="lowStockOnly"
-                    disabled
-                  />
-                  Low &amp; out of stock only
-                </label>
+              <div class="field">
+                <label for="sort-select">Sort by</label>
+                <select id="sort-select" disabled>
+                  <option value="name-asc">Name A–Z</option>
+                  <option value="name-desc">Name Z–A</option>
+                  <option value="price-desc">Price high–low</option>
+                  <option value="price-asc">Price low–high</option>
+                  <option value="stock-asc">Stock low–high</option>
+                  <option value="stock-desc">Stock high–low</option>
+                  <option value="value-desc">Value high–low</option>
+                </select>
               </div>
             </form>
 
             <div class="table-wrap">
               <table>
-                <caption class="visually-hidden">
-                  Current stationery inventory, with quantity controls
-                </caption>
+                <caption class="visually-hidden">Current stationery inventory, with quantity controls</caption>
                 <thead>
                   <tr>
                     <th scope="col">Name</th>
                     <th scope="col">Category</th>
-                    <th scope="col">Price</th>
-                    <th scope="col">Stock</th>
+                    <th scope="col" class="num">Price</th>
+                    <th scope="col" class="num">Stock</th>
                     <th scope="col">Status</th>
                     <th scope="col">Adjust quantity</th>
-                    <th scope="col">
-                      <span class="visually-hidden">Delete</span>
-                    </th>
+                    <th scope="col"><span class="visually-hidden">Edit or delete</span></th>
                   </tr>
                 </thead>
-
-                <!--
-              Demo rows below mirror the seed data.json so the layout can be reviewed
-              before app.js exists. app.js should clear and re-render #inventory-body
-              from fetched data rather than editing these rows directly.
-            -->
-                <tbody id="inventory-body">
-                  <tr data-id="1">
-                    <td data-label="Name">Notebook</td>
-                    <td data-label="Category">Paper</td>
-                    <td data-label="Price">60 AFN</td>
-                    <td data-label="Stock">10</td>
-                    <td data-label="Status">
-                      <span class="badge success">In stock</span>
-                    </td>
-                    <td class="adjust-cell" data-label="Adjust quantity">
-                      <label class="visually-hidden" for="qty-1"
-                        >Quantity to restock or sell for Notebook</label
-                      >
-                      <input
-                        type="number"
-                        id="qty-1"
-                        min="1"
-                        step="1"
-                        value="1"
-                        inputmode="numeric"
-                      />
-                      <div class="actions">
-                        <button type="button" class="btn-secondary">
-                          Restock
-                        </button>
-                        <button type="button">Sell</button>
-                      </div>
-                    </td>
-                    <td data-label="">
-                      <button type="button" class="btn-danger">Delete</button>
-                    </td>
-                  </tr>
-
-                  <tr data-id="2">
-                    <td data-label="Name">Blue pen</td>
-                    <td data-label="Category">Writing</td>
-                    <td data-label="Price">15 AFN</td>
-                    <td data-label="Stock">3</td>
-                    <td data-label="Status">
-                      <span class="badge warning">Low stock</span>
-                    </td>
-                    <td class="adjust-cell" data-label="Adjust quantity">
-                      <label class="visually-hidden" for="qty-2"
-                        >Quantity to restock or sell for Blue pen</label
-                      >
-                      <input
-                        type="number"
-                        id="qty-2"
-                        min="1"
-                        step="1"
-                        value="1"
-                        inputmode="numeric"
-                      />
-                      <div class="actions">
-                        <button type="button" class="btn-secondary">
-                          Restock
-                        </button>
-                        <button type="button">Sell</button>
-                      </div>
-                    </td>
-                    <td data-label="">
-                      <button type="button" class="btn-danger">Delete</button>
-                    </td>
-                  </tr>
-
-                  <tr data-id="3">
-                    <td data-label="Name">Pencil</td>
-                    <td data-label="Category">Writing</td>
-                    <td data-label="Price">10 AFN</td>
-                    <td data-label="Stock">0</td>
-                    <td data-label="Status">
-                      <span class="badge error">Out of stock</span>
-                    </td>
-                    <td class="adjust-cell" data-label="Adjust quantity">
-                      <label class="visually-hidden" for="qty-3"
-                        >Quantity to restock or sell for Pencil</label
-                      >
-                      <input
-                        type="number"
-                        id="qty-3"
-                        min="1"
-                        step="1"
-                        value="1"
-                        inputmode="numeric"
-                      />
-                      <div class="actions">
-                        <button type="button" class="btn-secondary">
-                          Restock
-                        </button>
-                        <button type="button">Sell</button>
-                      </div>
-                    </td>
-                    <td data-label="">
-                      <button type="button" class="btn-danger">Delete</button>
-                    </td>
-                  </tr>
-
-                  <tr data-id="4">
-                    <td data-label="Name">Folder</td>
-                    <td data-label="Category">Office</td>
-                    <td data-label="Price">40 AFN</td>
-                    <td data-label="Stock">5</td>
-                    <td data-label="Status">
-                      <span class="badge success">In stock</span>
-                    </td>
-                    <td class="adjust-cell" data-label="Adjust quantity">
-                      <label class="visually-hidden" for="qty-4"
-                        >Quantity to restock or sell for Folder</label
-                      >
-                      <input
-                        type="number"
-                        id="qty-4"
-                        min="1"
-                        step="1"
-                        value="1"
-                        inputmode="numeric"
-                      />
-                      <div class="actions">
-                        <button type="button" class="btn-secondary">
-                          Restock
-                        </button>
-                        <button type="button">Sell</button>
-                      </div>
-                    </td>
-                    <td data-label="">
-                      <button type="button" class="btn-danger">Delete</button>
-                    </td>
-                  </tr>
-
-                  <tr data-id="5">
-                    <td data-label="Name">Marker</td>
-                    <td data-label="Category">Writing</td>
-                    <td data-label="Price">50 AFN</td>
-                    <td data-label="Stock">2</td>
-                    <td data-label="Status">
-                      <span class="badge warning">Low stock</span>
-                    </td>
-                    <td class="adjust-cell" data-label="Adjust quantity">
-                      <label class="visually-hidden" for="qty-5"
-                        >Quantity to restock or sell for Marker</label
-                      >
-                      <input
-                        type="number"
-                        id="qty-5"
-                        min="1"
-                        step="1"
-                        value="1"
-                        inputmode="numeric"
-                      />
-                      <div class="actions">
-                        <button type="button" class="btn-secondary">
-                          Restock
-                        </button>
-                        <button type="button">Sell</button>
-                      </div>
-                    </td>
-                    <td data-label="">
-                      <button type="button" class="btn-danger">Delete</button>
-                    </td>
-                  </tr>
-                </tbody>
+                <tbody id="inventory-body"></tbody>
               </table>
             </div>
 
-            <p class="empty-state" id="empty-state" hidden>
-              No products match your search or filters. Try clearing them to see
-              the full inventory.
-            </p>
+            <p class="empty-state" id="empty-state" hidden>No products match your filters. Clear them to see the full inventory.</p>
+            <p class="table-meta" id="table-meta" aria-live="polite"></p>
           </section>
 
           <aside class="side-panel">
             <section class="panel" aria-labelledby="add-heading">
-              <h2 id="add-heading">
-                <span class="panel-icon" aria-hidden="true"
-                  ><svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M12 5v14M5 12h14" /></svg
-                ></span>
-                Add a product
-              </h2>
-
+              <h2 id="add-heading">Add a product</h2>
               <form id="add-form" novalidate>
                 <div class="field">
                   <label for="new-name">Name</label>
-                  <input
-                    type="text"
-                    id="new-name"
-                    name="name"
-                    minlength="2"
-                    maxlength="60"
-                    required
-                    disabled
-                  />
+                  <input type="text" id="new-name" maxlength="60" required disabled />
                 </div>
-
                 <div class="field">
                   <label for="new-category">Category</label>
-                  <select id="new-category" name="category" required disabled>
-                    <option value="" disabled selected>
-                      Choose a category
-                    </option>
-                    <option value="Paper">Paper</option>
-                    <option value="Writing">Writing</option>
-                    <option value="Office">Office</option>
-                  </select>
+                  <select id="new-category" required disabled><option value="" disabled selected>Choose a category</option></select>
                 </div>
-
                 <div class="form-row">
                   <div class="field">
                     <label for="new-price">Price (AFN)</label>
-                    <input
-                      type="number"
-                      id="new-price"
-                      name="price"
-                      min="0.01"
-                      step="0.01"
-                      required
-                      disabled
-                    />
+                    <input type="number" id="new-price" min="0.01" step="0.01" inputmode="decimal" required disabled />
                   </div>
-
                   <div class="field">
                     <label for="new-stock">Starting stock</label>
-                    <input
-                      type="number"
-                      id="new-stock"
-                      name="stock"
-                      min="0"
-                      step="1"
-                      required
-                      disabled
-                    />
+                    <input type="number" id="new-stock" min="0" step="1" inputmode="numeric" required disabled />
                   </div>
                 </div>
-
-                <p
-                  id="add-form-error"
-                  class="field-error"
-                  role="alert"
-                  hidden
-                ></p>
-
-                <div class="actions">
-                  <button type="submit" id="add-submit-btn" disabled>
-                    Add product
-                  </button>
-                </div>
+                <p id="add-form-error" class="field-error" role="alert" hidden></p>
+                <button type="submit" id="add-submit-btn" class="btn" disabled>Add product</button>
               </form>
             </section>
 
+            <section class="panel" aria-labelledby="cat-heading">
+              <h2 id="cat-heading">Value by category</h2>
+              <ul class="breakdown" id="breakdown"></ul>
+            </section>
+
             <section class="panel" aria-labelledby="key-heading">
-              <h2 id="key-heading">
-                <span class="panel-icon" aria-hidden="true"
-                  ><svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 8v4l3 2" /></svg
-                ></span>
-                Stock status key
-              </h2>
+              <h2 id="key-heading">Stock status key</h2>
               <ul class="status-key">
-                <li>
-                  <span class="badge success">In stock</span
-                  ><span>4 units or more</span>
-                </li>
-                <li>
-                  <span class="badge warning">Low stock</span
-                  ><span>1&ndash;3 units</span>
-                </li>
-                <li>
-                  <span class="badge error">Out of stock</span
-                  ><span>0 units</span>
-                </li>
+                <li><span class="badge success">In stock</span><span>4 units or more</span></li>
+                <li><span class="badge warning">Low stock</span><span>1–3 units</span></li>
+                <li><span class="badge error">Out of stock</span><span>0 units</span></li>
               </ul>
+            </section>
+
+            <section class="panel" aria-labelledby="act-heading">
+              <h2 id="act-heading"><span class="grow">Recent activity</span>
+                <button type="button" id="clear-log-btn" class="btn btn-secondary btn-sm">Clear</button>
+              </h2>
+              <ul class="activity" id="activity"></ul>
             </section>
           </aside>
         </div>
@@ -469,10 +181,39 @@
     </main>
 
     <footer class="app-footer">
-      <div class="container">
-        <p class="muted">Demo: changes reset when this page reloads.</p>
-      </div>
+      <div class="container"><p class="muted">Changes are saved in this browser. Use “Reset data” to restore the original list.</p></div>
     </footer>
-      <script src="app.js" defer></script>
+
+    <!-- Edit dialog -->
+    <dialog id="edit-dialog" aria-labelledby="edit-title">
+      <form id="edit-form" novalidate>
+        <h2 id="edit-title">Edit product</h2>
+        <div class="field"><label for="edit-name">Name</label><input type="text" id="edit-name" maxlength="60" required /></div>
+        <div class="field"><label for="edit-category">Category</label><select id="edit-category"></select></div>
+        <div class="form-row">
+          <div class="field"><label for="edit-price">Price (AFN)</label><input type="number" id="edit-price" min="0.01" step="0.01" required /></div>
+          <div class="field"><label for="edit-stock">Stock</label><input type="number" id="edit-stock" min="0" step="1" required /></div>
+        </div>
+        <p id="edit-error" class="field-error" role="alert" hidden></p>
+        <div class="actions">
+          <button type="button" id="edit-cancel" class="btn btn-secondary">Cancel</button>
+          <button type="submit" class="btn">Save changes</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Confirm dialog -->
+    <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+      <h2 id="confirm-title">Delete product?</h2>
+      <p id="confirm-text" class="muted"></p>
+      <div class="actions">
+        <button type="button" id="confirm-cancel" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="confirm-ok" class="btn" style="background:var(--bad);color:#fff">Delete</button>
+      </div>
+    </dialog>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+
+    <script src="app.js" defer></script>
   </body>
 </html>
